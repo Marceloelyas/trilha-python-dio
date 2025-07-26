@@ -1,0 +1,454 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import textwrap
+from tkinter import font as tkfont
+import hashlib
+import json
+import os
+from PIL import Image, ImageTk
+
+class BancoApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sistema Bancário Premium")
+        self.root.geometry("1000x700")
+        self.root.minsize(800, 600)
+        self.root.state('zoomed')  # Maximiza a janela inicialmente
+        
+        # Configuração responsiva
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        
+        # Configuração de temas e estilos
+        self.setup_theme()
+        
+        # Variáveis do sistema bancário
+        self.saldo = 0
+        self.limite = 500
+        self.extrato = ""
+        self.numero_saques = 0
+        self.LIMITE_SAQUES = 3
+        self.AGENCIA = "0001"
+        self.usuarios = []
+        self.contas = []
+        self.usuario_logado = None
+        self.conta_logada = None
+        
+        # Carregar dados salvos
+        self.carregar_dados()
+        
+        # Tela de login
+        self.setup_login_screen()
+        
+        # Bind para redimensionamento
+        self.root.bind("<Configure>", self.on_window_resize)
+    
+    def setup_theme(self):
+        """Configura o tema e estilos da aplicação"""
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        
+        # Cores modernas
+        self.primary_color = "#2c3e50"
+        self.secondary_color = "#3498db"
+        self.success_color = "#2ecc71"
+        self.danger_color = "#e74c3c"
+        self.warning_color = "#f39c12"
+        self.light_color = "#ecf0f1"
+        self.dark_color = "#34495e"
+        
+        # Configurar estilos
+        self.style.configure('.', background=self.light_color)
+        self.style.configure('TFrame', background=self.light_color)
+        self.style.configure('TLabel', background=self.light_color, font=('Helvetica', 10))
+        self.style.configure('TButton', font=('Helvetica', 10), padding=8)
+        self.style.configure('Primary.TButton', foreground='white', background=self.primary_color)
+        self.style.configure('Success.TButton', foreground='white', background=self.success_color)
+        self.style.configure('Danger.TButton', foreground='white', background=self.danger_color)
+        self.style.configure('Warning.TButton', foreground='white', background=self.warning_color)
+        self.style.configure('TEntry', font=('Helvetica', 10), padding=6)
+        self.style.configure('Title.TLabel', font=('Helvetica', 18, 'bold'), background=self.light_color)
+        self.style.configure('Subtitle.TLabel', font=('Helvetica', 14), background=self.light_color)
+        
+        self.root.configure(background=self.light_color)
+    
+    def on_window_resize(self, event):
+        """Atualiza o layout quando a janela é redimensionada"""
+        if hasattr(self, 'current_screen'):
+            if self.current_screen == "login":
+                self.center_login_frame()
+            elif self.current_screen == "main":
+                self.adjust_main_layout()
+    
+    def center_login_frame(self):
+        """Centraliza o frame de login na tela"""
+        if hasattr(self, 'login_frame'):
+            self.login_frame.place(relx=0.5, rely=0.5, anchor='center')
+    
+    def adjust_main_layout(self):
+        """Ajusta o layout principal para o redimensionamento"""
+        if hasattr(self, 'main_frame'):
+            # Ajusta o padding baseado no tamanho da janela
+            width = self.root.winfo_width()
+            padx = max(20, width * 0.05)  # 5% da largura ou mínimo 20px
+            
+            self.main_frame.pack_configure(padx=padx, pady=20)
+            
+            # Ajusta o tamanho da fonte baseado na largura
+            base_font_size = max(10, int(width / 80))
+            self.style.configure('TLabel', font=('Helvetica', base_font_size))
+            self.style.configure('TButton', font=('Helvetica', base_font_size))
+            
+            title_size = max(16, int(width / 60))
+            self.style.configure('Title.TLabel', font=('Helvetica', title_size, 'bold'))
+            
+            # Atualiza widgets específicos
+            if hasattr(self, 'extrato_text'):
+                self.extrato_text.configure(font=('Helvetica', base_font_size))
+    
+    def setup_login_screen(self):
+        """Configura a tela de login responsiva"""
+        self.clear_window()
+        self.current_screen = "login"
+        
+        # Frame principal que se expande
+        container = ttk.Frame(self.root)
+        container.grid(row=0, column=0, sticky="nsew")
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+        
+        # Frame de login que será centralizado
+        self.login_frame = ttk.Frame(container, style='TFrame')
+        self.login_frame.grid(row=0, column=0)
+        
+        # Conteúdo do login
+        ttk.Label(self.login_frame, text="Banco Digital", style='Title.TLabel').grid(row=0, column=0, columnspan=2, pady=(0, 30))
+        
+        # Formulário responsivo
+        ttk.Label(self.login_frame, text="CPF:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        self.login_cpf = ttk.Entry(self.login_frame)
+        self.login_cpf.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        
+        ttk.Label(self.login_frame, text="Senha:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
+        self.login_senha = ttk.Entry(self.login_frame, show="*")
+        self.login_senha.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Botões responsivos
+        btn_frame = ttk.Frame(self.login_frame)
+        btn_frame.grid(row=3, column=0, columnspan=2, pady=(20, 0), sticky="ew")
+        
+        ttk.Button(btn_frame, text="Login", command=self.fazer_login, 
+                  style='Primary.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        
+        ttk.Button(btn_frame, text="Criar Conta", command=self.show_criar_conta_screen, 
+                  style='Success.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        
+        # Configuração de colunas para expansão
+        self.login_frame.columnconfigure(1, weight=1)
+        
+        # Centraliza o frame
+        self.center_login_frame()
+        
+        # Foco no campo CPF
+        self.login_cpf.focus_set()
+    
+    def show_criar_conta_screen(self):
+        """Mostra a tela de criação de conta responsiva"""
+        self.clear_window()
+        self.current_screen = "create_account"
+        
+        # Container principal
+        container = ttk.Frame(self.root)
+        container.grid(row=0, column=0, sticky="nsew")
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+        
+        # Frame com barra de rolagem
+        canvas = tk.Canvas(container, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Conteúdo do formulário
+        ttk.Label(scrollable_frame, text="Criar Nova Conta", style='Title.TLabel').pack(pady=(20, 30))
+        
+        form_frame = ttk.Frame(scrollable_frame)
+        form_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Campos do formulário
+        fields = [
+            ("Nome Completo:", "nome"),
+            ("CPF (somente números):", "cpf"),
+            ("Data de Nascimento (dd/mm/aaaa):", "data_nasc"),
+            ("Endereço Completo:", "endereco"),
+            ("Criar Senha:", "senha", True),
+            ("Confirmar Senha:", "confirmar_senha", True)
+        ]
+        
+        self.cadastro_entries = {}
+        
+        for label, field, *opts in fields:
+            frame = ttk.Frame(form_frame)
+            frame.pack(fill=tk.X, pady=5)
+            
+            ttk.Label(frame, text=label, width=25).pack(side=tk.LEFT, padx=5)
+            entry = ttk.Entry(frame, show="*" if opts and opts[0] else None)
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+            self.cadastro_entries[field] = entry
+        
+        # Botões
+        btn_frame = ttk.Frame(scrollable_frame)
+        btn_frame.pack(fill=tk.X, padx=20, pady=30)
+        
+        ttk.Button(btn_frame, text="Criar Conta", command=self.criar_nova_conta, 
+                  style='Success.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=10)
+        
+        ttk.Button(btn_frame, text="Voltar", command=self.setup_login_screen, 
+                  style='Danger.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=10)
+    
+    def setup_main_interface(self):
+        """Configura a interface principal responsiva"""
+        self.clear_window()
+        self.current_screen = "main"
+        
+        # Configuração de grid responsivo
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        
+        # Container principal
+        self.main_container = ttk.Frame(self.root)
+        self.main_container.grid(row=0, column=0, sticky="nsew")
+        self.main_container.grid_rowconfigure(1, weight=1)
+        self.main_container.grid_columnconfigure(0, weight=1)
+        
+        # Barra superior
+        top_bar = ttk.Frame(self.main_container, style='TFrame')
+        top_bar.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
+        top_bar.columnconfigure(1, weight=1)
+        
+        ttk.Label(top_bar, text=f"Bem-vindo, {self.usuario_logado['nome']}!", 
+                 style='Title.TLabel').grid(row=0, column=0, sticky="w")
+        
+        self.saldo_label = ttk.Label(top_bar, text=f"Saldo: R$ {self.saldo:.2f}", 
+                                   style='Subtitle.TLabel')
+        self.saldo_label.grid(row=0, column=1, sticky="e")
+        
+        # Botão de logout
+        ttk.Button(top_bar, text="Sair", command=self.logout, 
+                  style='Danger.TButton').grid(row=0, column=2, padx=10)
+        
+        # Área de conteúdo principal
+        self.content_paned = ttk.PanedWindow(self.main_container, orient=tk.HORIZONTAL)
+        self.content_paned.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        
+        # Painel esquerdo - Menu
+        left_panel = ttk.Frame(self.content_paned, width=200, style='TFrame')
+        self.content_paned.add(left_panel, weight=0)
+        
+        # Menu de navegação
+        menu_buttons = [
+            ("Depósito", self.deposit_icon, lambda: self.show_operation_frame("deposito")),
+            ("Saque", self.withdraw_icon, lambda: self.show_operation_frame("saque")),
+            ("Extrato", self.statement_icon, self.mostrar_extrato),
+            ("Minha Conta", self.user_icon, self.mostrar_info_conta),
+            ("Alterar Senha", self.lock_icon, self.show_change_password)
+        ]
+        
+        for text, icon, command in menu_buttons:
+            btn = ttk.Button(left_panel, text=text, image=icon, compound=tk.TOP,
+                           command=command, style='Primary.TButton')
+            btn.pack(fill=tk.X, pady=5, padx=10)
+        
+        # Painel direito - Conteúdo
+        self.right_panel = ttk.Frame(self.content_paned, style='TFrame')
+        self.content_paned.add(self.right_panel, weight=1)
+        
+        # Mostrar dashboard inicial
+        self.show_dashboard()
+        
+        # Ajusta o layout inicial
+        self.adjust_main_layout()
+    
+    def show_dashboard(self):
+        """Mostra o painel inicial/dashboard"""
+        self.clear_content_frame()
+        
+        # Frame principal
+        frame = ttk.Frame(self.right_panel, style='TFrame')
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        ttk.Label(frame, text="Visão Geral", style='Title.TLabel').pack(pady=(0, 20))
+        
+        # Cartões de resumo
+        cards_frame = ttk.Frame(frame)
+        cards_frame.pack(fill=tk.X, pady=10)
+        
+        # Cartão de saldo
+        balance_card = ttk.Frame(cards_frame, style='TFrame', relief=tk.RAISED, borderwidth=1)
+        balance_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        ttk.Label(balance_card, text="Saldo Disponível", style='Subtitle.TLabel').pack(pady=10)
+        ttk.Label(balance_card, text=f"R$ {self.saldo:.2f}", 
+                 font=('Helvetica', 24, 'bold')).pack(pady=(0, 10))
+        ttk.Button(balance_card, text="Depositar", command=lambda: self.show_operation_frame("deposito"),
+                  style='Success.TButton').pack(pady=5, padx=10, fill=tk.X)
+        
+        # Cartão de extrato
+        statement_card = ttk.Frame(cards_frame, style='TFrame', relief=tk.RAISED, borderwidth=1)
+        statement_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        ttk.Label(statement_card, text="Últimas Transações", style='Subtitle.TLabel').pack(pady=10)
+        
+        # Mostrar últimas 3 transações
+        transactions = self.extrato.split('\n')[-4:-1] if self.extrato else ["Nenhuma transação recente"]
+        for trans in transactions:
+            if trans.strip():
+                ttk.Label(statement_card, text=trans.strip()).pack(anchor="w", padx=10, pady=2)
+        
+        ttk.Button(statement_card, text="Ver Extrato Completo", command=self.mostrar_extrato,
+                  style='Primary.TButton').pack(pady=5, padx=10, fill=tk.X)
+        
+        # Cartão de conta
+        account_card = ttk.Frame(cards_frame, style='TFrame', relief=tk.RAISED, borderwidth=1)
+        account_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        ttk.Label(account_card, text="Minha Conta", style='Subtitle.TLabel').pack(pady=10)
+        ttk.Label(account_card, text=f"Agência: {self.AGENCIA}").pack(anchor="w", padx=10, pady=2)
+        ttk.Label(account_card, text=f"Conta: {self.conta_logada['numero_conta']}").pack(anchor="w", padx=10, pady=2)
+        ttk.Button(account_card, text="Detalhes da Conta", command=self.mostrar_info_conta,
+                  style='Primary.TButton').pack(pady=5, padx=10, fill=tk.X)
+    
+    def show_operation_frame(self, operation):
+        """Mostra o frame de operação bancária responsivo"""
+        self.clear_content_frame()
+        
+        frame = ttk.Frame(self.right_panel, style='TFrame')
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Frame centralizado
+        center_frame = ttk.Frame(frame)
+        center_frame.place(relx=0.5, rely=0.3, anchor="center")
+        
+        if operation == "deposito":
+            ttk.Label(center_frame, text="Valor do Depósito:", style='Subtitle.TLabel').grid(row=0, column=0, padx=10, pady=10)
+            self.operation_entry = ttk.Entry(center_frame, font=('Helvetica', 12))
+            self.operation_entry.grid(row=0, column=1, padx=10, pady=10)
+            
+            btn_frame = ttk.Frame(center_frame)
+            btn_frame.grid(row=1, column=0, columnspan=2, pady=20, sticky="ew")
+            
+            ttk.Button(btn_frame, text="Confirmar Depósito", command=self.realizar_deposito, 
+                      style='Success.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+            
+            ttk.Button(btn_frame, text="Cancelar", command=self.show_dashboard, 
+                      style='Danger.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+        else:
+            ttk.Label(center_frame, text="Valor do Saque:", style='Subtitle.TLabel').grid(row=0, column=0, padx=10, pady=10)
+            self.operation_entry = ttk.Entry(center_frame, font=('Helvetica', 12))
+            self.operation_entry.grid(row=0, column=1, padx=10, pady=10)
+            
+            ttk.Label(center_frame, text=f"Saques hoje: {self.numero_saques}/{self.LIMITE_SAQUES}").grid(row=2, column=0, columnspan=2)
+            
+            btn_frame = ttk.Frame(center_frame)
+            btn_frame.grid(row=3, column=0, columnspan=2, pady=20, sticky="ew")
+            
+            ttk.Button(btn_frame, text="Confirmar Saque", command=self.realizar_saque, 
+                      style='Danger.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+            
+            ttk.Button(btn_frame, text="Cancelar", command=self.show_dashboard, 
+                      style='Warning.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+        
+        # Foco no campo de entrada
+        self.operation_entry.focus_set()
+    
+    def show_change_password(self):
+        """Mostra o formulário para alterar senha"""
+        self.clear_content_frame()
+        
+        frame = ttk.Frame(self.right_panel, style='TFrame')
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        center_frame = ttk.Frame(frame)
+        center_frame.place(relx=0.5, rely=0.3, anchor="center")
+        
+        ttk.Label(center_frame, text="Alterar Senha", style='Title.TLabel').grid(row=0, column=0, columnspan=2, pady=20)
+        
+        # Campos do formulário
+        ttk.Label(center_frame, text="Senha Atual:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        self.current_pass = ttk.Entry(center_frame, show="*")
+        self.current_pass.grid(row=1, column=1, padx=5, pady=5)
+        
+        ttk.Label(center_frame, text="Nova Senha:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
+        self.new_pass = ttk.Entry(center_frame, show="*")
+        self.new_pass.grid(row=2, column=1, padx=5, pady=5)
+        
+        ttk.Label(center_frame, text="Confirmar Nova Senha:").grid(row=3, column=0, padx=5, pady=5, sticky="e")
+        self.confirm_new_pass = ttk.Entry(center_frame, show="*")
+        self.confirm_new_pass.grid(row=3, column=1, padx=5, pady=5)
+        
+        # Botões
+        btn_frame = ttk.Frame(center_frame)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=20, sticky="ew")
+        
+        ttk.Button(btn_frame, text="Alterar Senha", command=self.change_password, 
+                  style='Success.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+        
+        ttk.Button(btn_frame, text="Cancelar", command=self.show_dashboard, 
+                  style='Danger.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+    
+    def change_password(self):
+        """Altera a senha do usuário"""
+        current = self.current_pass.get()
+        new = self.new_pass.get()
+        confirm = self.confirm_new_pass.get()
+        
+        # Validações
+        if not all([current, new, confirm]):
+            messagebox.showerror("Erro", "Todos os campos são obrigatórios!")
+            return
+        
+        if new != confirm:
+            messagebox.showerror("Erro", "As novas senhas não coincidem!")
+            return
+        
+        if len(new) < 6:
+            messagebox.showerror("Erro", "A senha deve ter pelo menos 6 caracteres!")
+            return
+        
+        # Verificar senha atual
+        current_hash = hashlib.sha256(current.encode()).hexdigest()
+        if current_hash != self.usuario_logado['senha_hash']:
+            messagebox.showerror("Erro", "Senha atual incorreta!")
+            return
+        
+        # Atualizar senha
+        new_hash = hashlib.sha256(new.encode()).hexdigest()
+        self.usuario_logado['senha_hash'] = new_hash
+        
+        # Atualizar em todas as contas do usuário
+        for conta in self.contas:
+            if conta['usuario']['cpf'] == self.usuario_logado['cpf']:
+                conta['usuario'] = self.usuario_logado
+        
+        messagebox.showinfo("Sucesso", "Senha alterada com sucesso!")
+        self.salvar_dados()
+        self.show_dashboard()
+    
+    # ... (outros métodos permanecem iguais, como realizar_deposito, realizar_saque, etc.)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BancoApp(root)
+    root.mainloop()
